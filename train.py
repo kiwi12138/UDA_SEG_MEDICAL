@@ -14,8 +14,8 @@ import os
 from model.deeplab_multi import DeeplabMulti
 from model.discriminator import FCDiscriminator
 from model.discriminator import OutspaceDiscriminator, Discriminator_aux
-from dataset.gta5_dataset import GTA5DataSet
-from dataset.cityscapes_dataset import cityscapesDataSet
+from dataset.mr_dataset import MRDataSet
+from dataset.ct_dataset import CTDataSet
 from dicecoefficient import MulticlassDiceCoefficient
 from tensorboardX import SummaryWriter
 from util import DiceLoss
@@ -30,11 +30,11 @@ LEARNING_RATE = 0.01
 MOMENTUM = 0.9
 NUM_CLASSES = 5
 NUM_STEPS = 10000000
-NUM_STEPS_STOP = 10000000  # early stopping
+NUM_STEPS_STOP = 10000000 
 POWER = 0.9
 RESTORE_FROM = './model_weight/DeepLab_resnet_pretrained_init-f81d91e8.pth'
 SAVE_PRED_EVERY = 1000000
-SNAPSHOT_DIR = './snapshots_0718/'
+SNAPSHOT_DIR = './snapshots_new/'
 WEIGHT_DECAY = 0.0005
 
 LEARNING_RATE_D = 1e-4
@@ -164,18 +164,6 @@ def main():
 
     # Create network
     model = DeeplabMulti(num_classes=args.num_classes)
-    # saved_state_dict = torch.load(args.restore_from)
-    # new_params = model.state_dict().copy()
-    # for i in saved_state_dict:
-    #     i_parts = i.split('.')
-    #     if not args.num_classes == 5 or not i_parts[1] == 'layer5':
-    #         if i_parts[1]=='layer4' and i_parts[2]=='2':
-    #             i_parts[1] = 'layer5'
-    #             i_parts[2] = '0'
-    #             new_params['.'.join(i_parts[1:])] = saved_state_dict[i]
-    #         else:
-    #             new_params['.'.join(i_parts[1:])] = saved_state_dict[i]
-    # model.load_state_dict(new_params)
     model.train()
     model.to(device)
 
@@ -192,14 +180,14 @@ def main():
         os.makedirs(args.snapshot_dir)
 
     trainloader = data.DataLoader(
-        GTA5DataSet(args.data_dir, args.data_list, max_iters=args.num_steps * args.batch_size,
+        MRDataSet(args.data_dir, args.data_list, max_iters=args.num_steps * args.batch_size,
                     crop_size=input_size,
                     scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN),
         batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
 
     trainloader_iter = enumerate(trainloader)
 
-    targetloader = data.DataLoader(cityscapesDataSet(args.data_dir_target, args.data_list_target,
+    targetloader = data.DataLoader(CTDataSet(args.data_dir_target, args.data_list_target,
                                                      max_iters=args.num_steps * args.batch_size,
                                                      crop_size=input_size_target,
                                                      scale=False, mirror=args.random_mirror, mean=IMG_MEAN,
@@ -294,9 +282,6 @@ def main():
         loss_D_source += bce_loss(D_out_source,
                                   torch.FloatTensor(D_out_source.data.size()).fill_(source_label).to(device))
 
-        # D_out_source = model_D[2](F.softmax(pred_source.detach(),dim=1))
-        # loss_D_source_aux= bce_loss(D_out_source, torch.FloatTensor(D_out_source.data.size()).fill_(source_label).to(device))
-        # loss_D_source += loss_D_source_aux
         loss_D_source.backward()
 
         # train with target
@@ -308,9 +293,6 @@ def main():
         loss_D_target += bce_loss(D_out_target,
                                   torch.FloatTensor(D_out_target.data.size()).fill_(target_label).to(device))
 
-        # D_out_target = model_D[2](F.softmax(pred_target.detach(),dim=1))
-        # loss_D_target_aux = bce_loss(D_out_target, torch.FloatTensor(D_out_target.data.size()).fill_(target_label).to(device))
-        # loss_D_target +=loss_D_target_aux
         loss_D_target.backward()
 
         optimizer_D.step()
@@ -319,9 +301,7 @@ def main():
         dice_source = dice_coefficient(pred_source.detach(), labels.detach())
         dice_source =np.mean(dice_source)
 
-        if i_iter % 10 == 0:
-            # print('iter = {0:8d}/{1:8d}, loss_seg = {2:.3f} loss_adv = {3:.3f} loss_D_s = {4:.3f}, loss_D_t = {5:.3f}, loss_D_aux = {6:.3f}, dice_source = {7:.3f}'.format(
-            # i_iter, args.num_steps, loss_seg.item(), loss_adv.item(), loss_D_source.item(), loss_D_target.item(),(loss_D_target_aux+loss_D_target_aux).item(),dice_source))
+        if i_iter % 1000 == 0:
             print(
                 'iter = {0:8d}/{1:8d}, loss_seg = {2:.3f} loss_adv = {3:.3f} loss_D_s = {4:.3f}, loss_D_t = {5:.3f},dice_source = {6:.3f}'.format(
                     i_iter, args.num_steps, loss_seg.item(), loss_adv.item(), loss_D_source.item(),
